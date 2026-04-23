@@ -1,0 +1,46 @@
+.device-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+  gap: 1.5rem;
+  width: 100%;
+}
+
+.device-grid-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 240px;
+  background-color: transparent;
+  border-radius: 8px;
+  border: 1px dashed var(--border-color);
+  width: 100%;
+  color: var(--text-gray);
+}
+
+.error-state {
+  color: var(--danger-color);
+  background-color: var(--danger-bg);
+  border: 1px solid rgba(224, 62, 62, 0.2);
+}
+
+.spinner {
+  width: 24px;
+  height: 24px;
+  border: 2px solid rgba(55, 53, 47, 0.1);
+  border-radius: 50%;
+  border-top-color: var(--text-main);
+  animation: spin 1s ease-in-out infinite;
+}
+
+.mt-2 {
+  margin-top: 0.75rem;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
