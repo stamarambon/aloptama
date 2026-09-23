@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { fetchDevices, subscribeToDevices } from './services/dataService';
+import { fetchDevices, subscribeToDevices, emptyImageBucket } from './services/dataService';
 import DeviceGrid from './components/DeviceGrid';
-import { LayoutDashboard, RefreshCcw } from 'lucide-react';
+import { LayoutDashboard, RefreshCcw, Trash2 } from 'lucide-react';
 
 function App() {
   const [devices, setDevices] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [emptying, setEmptying] = useState(false);
   const [error, setError] = useState(null);
 
   const loadData = async () => {
@@ -18,6 +19,27 @@ function App() {
       setError(null);
     }
     setLoading(false);
+  };
+
+  const handleEmptyBucket = async () => {
+    const confirmed = window.confirm(
+      'Hapus seluruh file di bucket aloptama-images?\n\nTindakan ini tidak bisa dibatalkan. Kartu perangkat akan kehilangan gambar sampai screenshot baru terkirim.'
+    );
+    if (!confirmed || emptying) {
+      return;
+    }
+
+    setEmptying(true);
+    const { deleted, error: emptyError } = await emptyImageBucket();
+    setEmptying(false);
+
+    if (emptyError) {
+      setError(emptyError);
+      return;
+    }
+
+    await loadData();
+    window.alert(`Bucket dikosongkan. ${deleted} file dihapus.`);
   };
 
   useEffect(() => {
@@ -37,39 +59,25 @@ function App() {
 
   return (
     <div className="container">
-      <header className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: '1rem' }}>
+      <header className="page-header">
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '4px' }}>
+          <div className="page-title-row">
             <LayoutDashboard size={28} style={{ color: 'var(--text-main)' }} />
             <h1 className="page-title">Monitoring Devices</h1>
           </div>
           <p className="text-gray" style={{ margin: 0 }}>Real-time display status overview.</p>
         </div>
-        
-        <button 
-          onClick={loadData}
-          style={{
-            background: 'none',
-            border: '1px solid var(--border-light)',
-            borderRadius: '6px',
-            padding: '6px 14px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            cursor: 'pointer',
-            fontSize: '0.9rem',
-            fontWeight: '500',
-            color: 'var(--text-main)',
-            backgroundColor: 'var(--bg-color)',
-            transition: 'background-color 0.2s ease, box-shadow 0.2s ease',
-            boxShadow: '0 1px 2px rgba(0, 0, 0, 0.03)'
-          }}
-          onMouseOver={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-hover)'}
-          onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-color)'}
-        >
-          <RefreshCcw size={14} className={loading ? 'spin' : ''} style={{ opacity: 0.7 }} />
-          Refresh
-        </button>
+
+        <div className="header-actions">
+          <button className="header-btn" onClick={loadData} disabled={emptying}>
+            <RefreshCcw size={14} className={loading ? 'spin' : ''} style={{ opacity: 0.7 }} />
+            Refresh
+          </button>
+          <button className="header-btn header-btn-danger" onClick={handleEmptyBucket} disabled={emptying}>
+            <Trash2 size={14} />
+            {emptying ? 'Menghapus...' : 'Hapus seluruh bucket'}
+          </button>
+        </div>
       </header>
 
       <main>
