@@ -1,4 +1,5 @@
 import os
+import sys
 import json
 import time
 import threading
@@ -8,8 +9,66 @@ from urllib.parse import unquote, urlparse
 from PIL import ImageGrab, Image, ImageDraw
 from supabase import create_client, Client
 import pystray
+import winreg
 
-CONFIG_FILE = "config.json"
+APP_NAME = "AloptamaAutoScreenshot"
+
+if getattr(sys, 'frozen', False):
+    BASE_DIR = os.path.dirname(sys.executable)
+else:
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+CONFIG_FILE = os.path.join(BASE_DIR, "config.json")
+
+
+def get_startup_command():
+    if getattr(sys, 'frozen', False):
+        return f'"{sys.executable}"'
+    else:
+        script_path = os.path.abspath(__file__)
+        return f'"{sys.executable}" "{script_path}"'
+
+
+def is_auto_startup_enabled():
+    try:
+        key = winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER,
+            r"Software\Microsoft\Windows\CurrentVersion\Run",
+            0,
+            winreg.KEY_READ
+        )
+        val, _ = winreg.QueryValueEx(key, APP_NAME)
+        winreg.CloseKey(key)
+        return bool(val)
+    except FileNotFoundError:
+        return False
+    except Exception:
+        return False
+
+
+def set_auto_startup(enable: bool):
+    try:
+        key = winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER,
+            r"Software\Microsoft\Windows\CurrentVersion\Run",
+            0,
+            winreg.KEY_SET_VALUE
+        )
+        if enable:
+            cmd = get_startup_command()
+            winreg.SetValueEx(key, APP_NAME, 0, winreg.REG_SZ, cmd)
+        else:
+            try:
+                winreg.DeleteValue(key, APP_NAME)
+            except FileNotFoundError:
+                pass
+        winreg.CloseKey(key)
+        return True
+    except Exception as e:
+        print(f"Error setting auto startup: {e}")
+        return False
+
+
 
 
 def storage_path_from_public_url(public_url, bucket_name):
@@ -63,7 +122,7 @@ class AppGUI:
     def __init__(self, root):
         self.root = root
         self.root.title("Aloptama Auto Screenshot")
-        self.root.geometry("480x680")
+        self.root.geometry("490x750")
         self.root.resizable(False, False)
 
         # Tangani tombol X di sudut kanan atas
@@ -76,6 +135,13 @@ class AppGUI:
 
         self.load_config()
         self.build_ui()
+
+        # Otomatisasi saat aplikasi pertama kali terbuka
+        if self.config.get("AUTO_START_CAPTURE", False):
+            self.root.after(1000, self.start_capture)
+
+        if self.config.get("START_MINIMIZED", False):
+            self.root.after(600, self.hide_window)
 
     def load_config(self):
         if os.path.exists(CONFIG_FILE):
@@ -95,6 +161,8 @@ class AppGUI:
             "BUCKET_NAME": "aloptama-images",
             "TABLE_NAME": "aloptama",
             "INTERVAL_DETIK": 60,
+            "AUTO_START_CAPTURE": False,
+            "START_MINIMIZED": False,
             "PERANGKAT": {
                 "kode": "PPN",
                 "jenis": "Display",
@@ -185,42 +253,68 @@ class AppGUI:
         self.lintang_var = tk.StringVar(value=self.config.get("PERANGKAT", {}).get("lintang", ""))
         self.status_var = tk.StringVar(value=self.config.get("PERANGKAT", {}).get("status", "green"))
         
+        self.auto_startup_var = tk.BooleanVar(value=is_auto_startup_enabled())
+        self.auto_start_capture_var = tk.BooleanVar(value=self.config.get("AUTO_START_CAPTURE", False))
+        self.start_minimized_var = tk.BooleanVar(value=self.config.get("START_MINIMIZED", False))
+        
         # --- Grup Database ---
         db_box = ttk.LabelFrame(frame, text="Database Supabase", padding=15)
-        db_box.pack(fill="x", padx=20, pady=(20, 10))
+        db_box.pack(fill="x", padx=20, pady=(15, 8))
 
         ttk.Label(db_box, text="Supabase URL:").pack(anchor=tk.W, pady=(0, 2))
-        ttk.Entry(db_box, textvariable=self.supabase_url_var, width=50).pack(fill="x", pady=(0, 10))
+        ttk.Entry(db_box, textvariable=self.supabase_url_var, width=50).pack(fill="x", pady=(0, 8))
 
         ttk.Label(db_box, text="Supabase Key:").pack(anchor=tk.W, pady=(0, 2))
-        ttk.Entry(db_box, textvariable=self.supabase_key_var, show="*", width=50).pack(fill="x", pady=(0, 5))
+        ttk.Entry(db_box, textvariable=self.supabase_key_var, show="*", width=50).pack(fill="x", pady=(0, 4))
 
         # --- Grup Perangkat ---
         dev_box = ttk.LabelFrame(frame, text="Data Perangkat", padding=15)
-        dev_box.pack(fill="x", padx=20, pady=10)
+        dev_box.pack(fill="x", padx=20, pady=8)
 
         grid_frame = ttk.Frame(dev_box)
         grid_frame.pack(fill="x")
 
-        ttk.Label(grid_frame, text="Kode:").grid(row=0, column=0, sticky=tk.W, pady=5, padx=(0, 10))
-        ttk.Entry(grid_frame, textvariable=self.kode_var, width=15).grid(row=0, column=1, sticky=tk.W, pady=5)
+        ttk.Label(grid_frame, text="Kode:").grid(row=0, column=0, sticky=tk.W, pady=4, padx=(0, 10))
+        ttk.Entry(grid_frame, textvariable=self.kode_var, width=15).grid(row=0, column=1, sticky=tk.W, pady=4)
 
-        ttk.Label(grid_frame, text="Jenis:").grid(row=0, column=2, sticky=tk.W, pady=5, padx=(20, 10))
-        ttk.Entry(grid_frame, textvariable=self.jenis_var, width=15).grid(row=0, column=3, sticky=tk.W, pady=5)
+        ttk.Label(grid_frame, text="Jenis:").grid(row=0, column=2, sticky=tk.W, pady=4, padx=(15, 10))
+        ttk.Entry(grid_frame, textvariable=self.jenis_var, width=15).grid(row=0, column=3, sticky=tk.W, pady=4)
 
-        ttk.Label(grid_frame, text="Bujur:").grid(row=1, column=0, sticky=tk.W, pady=5, padx=(0, 10))
-        ttk.Entry(grid_frame, textvariable=self.bujur_var, width=15).grid(row=1, column=1, sticky=tk.W, pady=5)
+        ttk.Label(grid_frame, text="Bujur:").grid(row=1, column=0, sticky=tk.W, pady=4, padx=(0, 10))
+        ttk.Entry(grid_frame, textvariable=self.bujur_var, width=15).grid(row=1, column=1, sticky=tk.W, pady=4)
 
-        ttk.Label(grid_frame, text="Lintang:").grid(row=1, column=2, sticky=tk.W, pady=5, padx=(20, 10))
-        ttk.Entry(grid_frame, textvariable=self.lintang_var, width=15).grid(row=1, column=3, sticky=tk.W, pady=5)
+        ttk.Label(grid_frame, text="Lintang:").grid(row=1, column=2, sticky=tk.W, pady=4, padx=(15, 10))
+        ttk.Entry(grid_frame, textvariable=self.lintang_var, width=15).grid(row=1, column=3, sticky=tk.W, pady=4)
         
-        ttk.Label(grid_frame, text="Status Awal:").grid(row=2, column=0, sticky=tk.W, pady=5, padx=(0, 10))
+        ttk.Label(grid_frame, text="Status Awal:").grid(row=2, column=0, sticky=tk.W, pady=4, padx=(0, 10))
         status_combo = ttk.Combobox(grid_frame, textvariable=self.status_var, values=["green", "yellow", "red"], width=13)
-        status_combo.grid(row=2, column=1, sticky=tk.W, pady=5)
+        status_combo.grid(row=2, column=1, sticky=tk.W, pady=4)
+
+        # --- Grup Startup & Otomasi ---
+        startup_box = ttk.LabelFrame(frame, text="Startup & Otomasi Windows", padding=12)
+        startup_box.pack(fill="x", padx=20, pady=8)
+
+        ttk.Checkbutton(
+            startup_box,
+            text="Jalankan otomatis saat Windows booting (Auto Startup)",
+            variable=self.auto_startup_var
+        ).pack(anchor=tk.W, pady=(0, 4))
+
+        ttk.Checkbutton(
+            startup_box,
+            text="Otomatis mulai capture saat aplikasi dibuka",
+            variable=self.auto_start_capture_var
+        ).pack(anchor=tk.W, pady=(0, 4))
+
+        ttk.Checkbutton(
+            startup_box,
+            text="Mulai langsung di System Tray (Background)",
+            variable=self.start_minimized_var
+        ).pack(anchor=tk.W, pady=(0, 2))
 
         # Tombol Save
         save_btn = ttk.Button(frame, text="Simpan Pengaturan", command=self.save_settings, width=20)
-        save_btn.pack(pady=20)
+        save_btn.pack(pady=12)
 
     # --- FUNGSI TRAY ---
     def hide_window(self):
@@ -273,8 +367,16 @@ class AppGUI:
             messagebox.showerror("Error", "Interval harus berupa angka")
             return
 
+        self.config["AUTO_START_CAPTURE"] = self.auto_start_capture_var.get()
+        self.config["START_MINIMIZED"] = self.start_minimized_var.get()
+
+        startup_success = set_auto_startup(self.auto_startup_var.get())
+        if not startup_success:
+            self.log("Peringatan: Gagal memperbarui registry Windows Auto Startup.")
+
         self.save_config()
         messagebox.showinfo("Success", "Settings saved successfully")
+
 
     def log(self, message):
         def _log():
@@ -337,11 +439,10 @@ class AppGUI:
                 self.log("Mengambil screenshot...")
                 screenshot = ImageGrab.grab()
                 
-                current_dir = os.path.dirname(os.path.abspath(__file__))
                 kode = perangkat.get("kode", "UNKNOWN")
                 timestamp = int(time.time())
                 file_name = f"{kode}_{timestamp}.jpg"
-                file_path = os.path.join(current_dir, file_name)
+                file_path = os.path.join(BASE_DIR, file_name)
                 
                 screenshot.save(file_path, "JPEG", quality=70)
                 self.log(f"Mengupload {file_name}...")
