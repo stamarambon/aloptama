@@ -1,0 +1,14 @@
+{
+    "SUPABASE_URL": "https://xdjurqzckgzjaaiccnyr.supabase.co",
+    "SUPABASE_KEY": "sb_publishable_G1lxjfFsEkjoDSUUCbrZGg_gKY1WPRu",
+    "BUCKET_NAME": "aloptama-images",
+    "TABLE_NAME": "aloptama",
+    "INTERVAL_DETIK": 10,
+    "PERANGKAT": {
+        "kode": "LAPTOP HASAN",
+        "jenis": "Display",
+        "bujur": "128.17604849093368",
+        "lintang": "-3.6940096187026654",
+        "status": "green"
+    }
+}
